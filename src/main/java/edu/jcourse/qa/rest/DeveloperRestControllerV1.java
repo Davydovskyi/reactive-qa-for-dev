@@ -5,6 +5,7 @@ import edu.jcourse.qa.exception.ApiException;
 import edu.jcourse.qa.service.DeveloperService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -18,7 +19,8 @@ public class DeveloperRestControllerV1 {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<DeveloperDto> create(@RequestBody DeveloperDto developerDto) {
-        return developerService.save(developerDto);
+        return developerService.save(developerDto)
+                .switchIfEmpty(Mono.error(new ApiException(HttpStatus.BAD_REQUEST, "Developer already exists")));
     }
 
     @PutMapping("/{id}")
@@ -45,12 +47,14 @@ public class DeveloperRestControllerV1 {
     }
 
     @DeleteMapping("/{id}")
-    public Mono<Void> delete(@PathVariable Long id,
-                             @RequestParam(defaultValue = "false") boolean force) {
-
-        return (force ?
+    public Mono<ResponseEntity<Object>> delete(@PathVariable Long id,
+                                               @RequestParam(defaultValue = "false") boolean force) {
+        Mono<Boolean> booleanMono = force ?
                 developerService.hardDeleteById(id) :
-                developerService.softDeleteById(id))
-                .then();
+                developerService.softDeleteById(id);
+        return booleanMono
+                .flatMap(deleted -> Mono.fromCallable(() -> deleted ?
+                        ResponseEntity.noContent().build() :
+                        ResponseEntity.notFound().build()));
     }
 }

@@ -11,7 +11,6 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record DeveloperDto(
-        @JsonProperty(access = JsonProperty.Access.READ_ONLY)
         Long id,
         String email,
         @JsonProperty("first_name")

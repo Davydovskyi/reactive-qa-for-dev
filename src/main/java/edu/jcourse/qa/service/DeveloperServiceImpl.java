@@ -2,9 +2,11 @@ package edu.jcourse.qa.service;
 
 import edu.jcourse.qa.dto.DeveloperDto;
 import edu.jcourse.qa.entity.Status;
+import edu.jcourse.qa.exception.ApiException;
 import edu.jcourse.qa.mapper.DeveloperMapper;
 import edu.jcourse.qa.repository.DeveloperRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
