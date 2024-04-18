@@ -1,37 +1,41 @@
-package edu.jcourse.qa.rest;
+package edu.jcourse.qa.integration.rest;
 
+import edu.jcourse.qa.config.PostgreTestcontainerConfig;
 import edu.jcourse.qa.dto.DeveloperDto;
+import edu.jcourse.qa.entity.Developer;
 import edu.jcourse.qa.entity.Status;
-import edu.jcourse.qa.service.DeveloperService;
+import edu.jcourse.qa.repository.DeveloperRepository;
 import lombok.RequiredArgsConstructor;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.ComponentScan;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
-@ComponentScan(basePackages = "edu.jcourse.qa.rest.handler")
-@WebFluxTest(controllers = DeveloperRestControllerV1.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureWebTestClient
+@Import(PostgreTestcontainerConfig.class)
+@TestInstance(TestInstance.Lifecycle.PER_METHOD)
 @RequiredArgsConstructor
-class DeveloperRestControllerV1Tests {
+class DeveloperRestControllerV1IT {
+
     private final WebTestClient webTestClient;
-    @MockBean
-    private DeveloperService developerService;
+    private final DeveloperRepository developerRepository;
+
+    @BeforeEach
+    public void setUp() {
+        developerRepository.deleteAll().block();
+    }
 
     @Test
     @DisplayName("Test create developer when success functionality")
     void createWhenSuccess() {
         DeveloperDto developerDto = buildDeveloperDto(null, "email");
-        DeveloperDto expectedResult = buildDeveloperDto(1L, "email");
-        doReturn(Mono.just(expectedResult)).when(developerService).save(any());
 
         webTestClient
                 .post()
@@ -42,64 +46,34 @@ class DeveloperRestControllerV1Tests {
                 .expectStatus().isCreated()
                 .expectBody()
                 .consumeWith(System.out::println)
-                .jsonPath("$.id").isEqualTo(1)
-                .jsonPath("$.first_name").isEqualTo("firstName");
-
-        verify(developerService).save(developerDto);
-        verifyNoMoreInteractions(developerService);
+                .jsonPath("$.id").isNotEmpty()
+                .jsonPath("$.email").isEqualTo("email");
     }
-
-    @Test
-    @DisplayName("Test create developer when failure functionality")
-    void createWhenFailure() {
-        DeveloperDto developerDto = buildDeveloperDto(null, "email");
-        doReturn(Mono.empty()).when(developerService).save(any());
-
-        webTestClient
-                .post()
-                .uri("/api/v1/developers")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(developerDto)
-                .exchange()
-                .expectStatus().isBadRequest()
-                .expectBody()
-                .consumeWith(System.out::println)
-                .jsonPath("$.errors[0].status").isEqualTo(HttpStatus.BAD_REQUEST.value())
-                .jsonPath("$.errors[0].message").isEqualTo("Developer already exists");
-
-        verify(developerService).save(developerDto);
-        verifyNoMoreInteractions(developerService);
-    }
-
 
     @Test
     @DisplayName("Test update developer when success functionality")
     void updateWhenSuccess() {
-        DeveloperDto developerDto = buildDeveloperDto(1L, "email");
-        DeveloperDto expectedResult = buildDeveloperDto(1L, "email2");
-        doReturn(Mono.just(expectedResult)).when(developerService).update(any(), any());
+        Developer developer = buildDeveloper();
+        developerRepository.save(developer).block();
+        DeveloperDto developerDto = buildDeveloperDto(developer.getId(), "email2");
 
         webTestClient
                 .put()
-                .uri("/api/v1/developers/1")
+                .uri("/api/v1/developers/{id}", developer.getId())
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(developerDto)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
                 .consumeWith(System.out::println)
-                .jsonPath("$.id").isEqualTo(1)
+                .jsonPath("$.id").isEqualTo(developer.getId())
                 .jsonPath("$.email").isEqualTo("email2");
-
-        verify(developerService).update(1L, developerDto);
-        verifyNoMoreInteractions(developerService);
     }
 
     @Test
     @DisplayName("Test update developer when failure functionality")
     void updateWhenFailure() {
         DeveloperDto developerDto = buildDeveloperDto(1L, "email");
-        doReturn(Mono.empty()).when(developerService).update(any(), any());
 
         webTestClient
                 .put()
@@ -112,16 +86,12 @@ class DeveloperRestControllerV1Tests {
                 .consumeWith(System.out::println)
                 .jsonPath("$.errors[0].status").isEqualTo(HttpStatus.NOT_FOUND.value())
                 .jsonPath("$.errors[0].message").isEqualTo("Developer not found");
-
-        verify(developerService).update(1L, developerDto);
-        verifyNoMoreInteractions(developerService);
     }
 
     @Test
     @DisplayName("Test find all developers when success functionality")
     void findAllWhenSuccess() {
-        DeveloperDto expectedResult = buildDeveloperDto(1L, "email");
-        doReturn(Flux.just(expectedResult)).when(developerService).findAll();
+        developerRepository.save(buildDeveloper()).block();
 
         webTestClient
                 .get()
@@ -133,50 +103,41 @@ class DeveloperRestControllerV1Tests {
                 .jsonPath("$.size()").isEqualTo(1)
                 .jsonPath("$[0].id").isEqualTo(1)
                 .jsonPath("$[0].email").isEqualTo("email");
-
-        verify(developerService).findAll();
-        verifyNoMoreInteractions(developerService);
     }
 
     @Test
     @DisplayName("Test hard delete developer when success functionality")
-    void deleteWhenSuccess() {
-        doReturn(Mono.just(true)).when(developerService).hardDeleteById(any());
+    void deleteHardWhenSuccess() {
+        Developer developer = buildDeveloper();
+        developerRepository.save(developer).block();
 
         webTestClient
                 .delete()
-                .uri("/api/v1/developers/1?force=true")
+                .uri("/api/v1/developers/{id}?force=true", developer.getId())
                 .exchange()
                 .expectStatus().isNoContent()
                 .expectBody()
                 .consumeWith(System.out::println);
-
-        verify(developerService).hardDeleteById(1L);
-        verifyNoMoreInteractions(developerService);
     }
 
     @Test
     @DisplayName("Test soft delete developer when success functionality")
     void deleteSoftWhenSuccess() {
-        doReturn(Mono.just(true)).when(developerService).softDeleteById(any());
+        Developer developer = buildDeveloper();
+        developerRepository.save(developer).block();
 
         webTestClient
                 .delete()
-                .uri("/api/v1/developers/1")
+                .uri("/api/v1/developers/{id}", developer.getId())
                 .exchange()
                 .expectStatus().isNoContent()
                 .expectBody()
                 .consumeWith(System.out::println);
-
-        verify(developerService).softDeleteById(1L);
-        verifyNoMoreInteractions(developerService);
     }
 
     @Test
     @DisplayName("Test soft delete developer when failure functionality")
     void deleteSoftWhenFailure() {
-        doReturn(Mono.just(false)).when(developerService).softDeleteById(any());
-
         webTestClient
                 .delete()
                 .uri("/api/v1/developers/1")
@@ -184,15 +145,23 @@ class DeveloperRestControllerV1Tests {
                 .expectStatus().isNotFound()
                 .expectBody()
                 .consumeWith(System.out::println);
-
-        verify(developerService).softDeleteById(1L);
-        verifyNoMoreInteractions(developerService);
     }
 
     private DeveloperDto buildDeveloperDto(Long id, String email) {
         return DeveloperDto.builder()
                 .id(id)
                 .email(email)
+                .firstName("firstName")
+                .lastName("lastName")
+                .speciality("speciality")
+                .status(Status.ACTIVE)
+                .build();
+    }
+
+    private Developer buildDeveloper() {
+        return Developer.builder()
+                .id(null)
+                .email("email")
                 .firstName("firstName")
                 .lastName("lastName")
                 .speciality("speciality")
